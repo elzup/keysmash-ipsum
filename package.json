@@ -8,6 +8,9 @@
   "main": "lib/cjs/index.js",
   "module": "lib/esm/index.js",
   "types": "lib/types/index.d.ts",
+  "bin": {
+    "keysmash-ipsum": "lib/esm/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
@@ -25,7 +28,8 @@
     "dummy-text",
     "keysmash",
     "llm",
-    "japanese"
+    "japanese",
+    "cli"
   ],
   "engines": {
     "node": ">=24"
@@ -41,7 +45,8 @@
     "check:fix": "biome check --write .",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:cov": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" \"test/**/*.test.ts\"",
-    "prepublishOnly": "pnpm test"
+    "cli": "node src/bin.ts",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "files": [
     "lib/"

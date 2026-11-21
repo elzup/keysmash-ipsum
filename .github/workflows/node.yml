@@ -29,4 +29,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm typecheck
-      - run: pnpm test:cov # pretest builds lib/
+      - run: pnpm test:cov # tests import src/*.ts directly (no build needed)
