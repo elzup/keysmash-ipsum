@@ -1,84 +1,147 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  buildPrompt,
-  type Complete,
+  buildRequest,
+  buildSchema,
+  generate,
   keysmashIpsum,
   parseRestored,
   restore,
 } from '../src/index.ts'
+import { fakeComplete } from './fake-llm.ts'
 
-/** 受け取ったプロンプトの番号付き行を数え、その数だけ `<n>: guess <n>` を返す偽 LLM */
-const fakeComplete: Complete = async (prompt) =>
-  prompt
-    .split('\n')
-    .filter((line) => /^\d+: /.test(line))
-    .map((_, i) => `${i + 1}: guess ${i + 1}`)
-    .join('\n')
+const twoSentences = generate({
+  seed: 's1',
+  count: 2,
+  words: { min: 3, max: 3 },
+})
 
-describe('buildPrompt', () => {
-  it('入力を番号付きで並べ、行数を指示する', () => {
-    const prompt = buildPrompt(['aa bb.', 'cc dd.'])
-    assert.match(prompt, /^1: aa bb\.$/m)
-    assert.match(prompt, /^2: cc dd\.$/m)
-    assert.match(prompt, /exactly 2 line/)
+describe('buildSchema', () => {
+  it('strict は文と語を必須プロパティで固定する', () => {
+    const schema = buildSchema(twoSentences) as {
+      required: string[]
+      additionalProperties: boolean
+      properties: Record<
+        string,
+        { required: string[]; additionalProperties: boolean }
+      >
+    }
+    assert.deepEqual(schema.required, ['s1', 's2'])
+    assert.equal(schema.additionalProperties, false)
+    assert.deepEqual(schema.properties.s1?.required, ['w1', 'w2', 'w3'])
+    assert.equal(schema.properties.s1?.additionalProperties, false)
   })
 
-  it('ja はかな漢字と空白除去を指示する', () => {
+  it('配列の長さ制約 (未対応の機能) を使わない', () => {
+    const json = JSON.stringify(buildSchema(twoSentences))
+    assert.doesNotMatch(json, /minItems|maxItems|minLength|maxLength/)
+  })
+
+  it('strict: false は 1 文 → 1 文字列', () => {
+    const schema = buildSchema(twoSentences, { strict: false }) as {
+      properties: Record<string, { type: string }>
+    }
+    assert.equal(schema.properties.s1?.type, 'string')
+  })
+})
+
+describe('buildRequest', () => {
+  it('入力の各語をキー付きで並べる', () => {
+    const { prompt, system } = buildRequest(twoSentences)
+    const first = twoSentences[0]
+    assert.ok(first)
+    assert.ok(prompt.split('\n').includes(`s1: ${first.text}`))
+    assert.ok(prompt.includes(`w1=${first.words[0]?.text} `))
+    assert.match(system, /JSON schema/)
+  })
+
+  it('ja はかな漢字を指示する', () => {
     assert.match(
-      buildPrompt(['あい'], { lang: 'ja' }),
-      /hiragana.*remove spaces/
+      buildRequest(twoSentences, { lang: 'ja' }).prompt,
+      /kana-kanji/
     )
-  })
-
-  it('strict: false で意訳を許す', () => {
-    assert.match(buildPrompt(['x'], { strict: false }), /paraphrase/)
   })
 })
 
 describe('parseRestored', () => {
-  it('番号を剥がし空行を捨てる', () => {
-    assert.deepEqual(parseRestored('1: Hello.\n\n2) World.\n', 2), [
-      'Hello.',
-      'World.',
-    ])
+  it('元の区切りと文末記号を戻す', () => {
+    const [sentence] = generate({
+      seed: 'p',
+      words: { min: 2, max: 2 },
+      seps: ',',
+    })
+    assert.ok(sentence)
+    const out = parseRestored({ s1: { w1: 'Hello', w2: 'world' } }, [sentence])
+    assert.deepEqual(out, ['Hello,world.'])
   })
 
-  it('行数が合わなければ throw する', () => {
-    assert.throws(() => parseRestored('1: only one', 2), /期待 2 行/)
+  it('ja は空白を消して句読点だけ残す', () => {
+    const [sentence] = generate({
+      seed: 'p',
+      lang: 'ja',
+      words: { min: 2, max: 2 },
+      seps: ' ',
+    })
+    assert.ok(sentence)
+    const out = parseRestored(
+      { s1: { w1: '今日は', w2: '晴れ' } },
+      [sentence],
+      { lang: 'ja' }
+    )
+    assert.deepEqual(out, ['今日は晴れ。'])
+  })
+
+  it('語に付いた句読点や空白は剥がす', () => {
+    const [sentence] = generate({
+      seed: 'p',
+      words: { min: 2, max: 2 },
+      seps: ' ',
+    })
+    assert.ok(sentence)
+    const out = parseRestored({ s1: { w1: ' Hello,', w2: 'world.' } }, [
+      sentence,
+    ])
+    assert.deepEqual(out, ['Hello world.'])
+  })
+
+  it('キー欠け・空文字・型違いは throw する', () => {
+    const one = twoSentences.slice(0, 1)
+    assert.throws(() => parseRestored({}, one), /s1/)
+    assert.throws(
+      () => parseRestored({ s1: { w1: 'a', w2: 'b' } }, one),
+      /s1\.w3/
+    )
+    assert.throws(
+      () => parseRestored({ s1: { w1: 'a', w2: '', w3: 'c' } }, one),
+      /s1\.w2/
+    )
+    assert.throws(
+      () => parseRestored({ s1: { w1: 'a', w2: 1, w3: 'c' } }, one),
+      /s1\.w2/
+    )
+    assert.throws(() => parseRestored('text', one), /root/)
   })
 })
 
 describe('restore / keysmashIpsum', () => {
-  it('complete を 1 回だけ呼び、行ごとに返す', async () => {
-    const calls: string[] = []
-    const complete: Complete = async (prompt) => {
-      calls.push(prompt)
-      return fakeComplete(prompt)
-    }
-    assert.deepEqual(await restore(['a.', 'b.'], { complete }), [
-      'guess 1',
-      'guess 2',
-    ])
-    assert.equal(calls.length, 1)
+  it('空なら LLM を呼ばない', async () => {
+    const out = await restore([], {
+      complete: async () => {
+        throw new Error('呼ばれてはいけない')
+      },
+    })
+    assert.deepEqual(out, [])
   })
 
-  it('空配列なら complete を呼ばない', async () => {
-    const complete: Complete = async () => {
-      throw new Error('呼ばれてはいけない')
-    }
-    assert.deepEqual(await restore([], { complete }), [])
-  })
-
-  it('keysmash と推測結果を対にして返す', async () => {
+  it('schema を LLM に渡し、結果を文ごとに返す', async () => {
     const results = await keysmashIpsum({
       seed: 's1',
       count: 2,
+      words: { min: 3, max: 3 },
       complete: fakeComplete,
     })
-    assert.deepEqual(results, [
-      { keysmash: 'ft dsxc gvdw sew swmnm hju ftgz hny.', text: 'guess 1' },
-      { keysmash: 'fv fbmjmr aqwev jyjhmnjn.', text: 'guess 2' },
-    ])
+    assert.equal(results.length, 2)
+    assert.equal(results[0]?.keysmash, twoSentences[0]?.text)
+    assert.match(results[0]?.text ?? '', /^W1.w2.+w3\.$/)
   })
 })

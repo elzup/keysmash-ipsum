@@ -7,7 +7,14 @@ export {
   resolveOptions,
   type Sentence,
 } from './generate.ts'
-export { buildPrompt, type PromptOptions, parseRestored } from './prompt.ts'
+export {
+  buildRequest,
+  buildSchema,
+  type JsonSchema,
+  type PromptOptions,
+  parseRestored,
+  type RestoreRequest,
+} from './prompt.ts'
 export {
   type Complete,
   type IpsumResult,

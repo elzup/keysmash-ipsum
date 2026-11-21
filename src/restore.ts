@@ -1,26 +1,37 @@
-import { type GenerateOptions, generate } from './generate.ts'
-import { buildPrompt, type PromptOptions, parseRestored } from './prompt.ts'
+import { type GenerateOptions, generate, type Sentence } from './generate.ts'
+import {
+  buildRequest,
+  type PromptOptions,
+  parseRestored,
+  type RestoreRequest,
+} from './prompt.ts'
 
-/** プロンプトを受けて LLM の返答テキストを返す関数。provider・キー・リトライは呼び出し側が持つ */
-export type Complete = (prompt: string) => Promise<string>
+/**
+ * 依頼 (system / prompt / JSON Schema) を受け、LLM の structured output を JSON 値で返す関数。
+ * provider・キー・リトライは呼び出し側が持つ。schema は必ず provider の structured output に渡すこと
+ */
+export type Complete = (request: RestoreRequest) => Promise<unknown>
 export type RestoreOptions = PromptOptions & { complete: Complete }
 export type IpsumResult = { keysmash: string; text: string }
 
-/** keysmash の各行を LLM に 1 回で読み解かせる */
+/** keysmash の各文を LLM に 1 回で読み解かせる */
 export const restore = async (
-  lines: readonly string[],
+  sentences: readonly Sentence[],
   opts: RestoreOptions
 ): Promise<string[]> => {
-  if (lines.length === 0) return []
-  const output = await opts.complete(buildPrompt(lines, opts))
-  return parseRestored(output, lines.length)
+  if (sentences.length === 0) return []
+  const output = await opts.complete(buildRequest(sentences, opts))
+  return parseRestored(output, sentences, opts)
 }
 
 /** generate → restore をまとめて行う */
 export const keysmashIpsum = async (
   opts: GenerateOptions & RestoreOptions
 ): Promise<IpsumResult[]> => {
-  const keysmashes = generate(opts).map((sentence) => sentence.text)
-  const texts = await restore(keysmashes, opts)
-  return keysmashes.map((keysmash, i) => ({ keysmash, text: texts[i] ?? '' }))
+  const sentences = generate(opts)
+  const texts = await restore(sentences, opts)
+  return sentences.map((sentence, i) => ({
+    keysmash: sentence.text,
+    text: texts[i] ?? '',
+  }))
 }
