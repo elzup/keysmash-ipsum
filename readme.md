@@ -24,6 +24,13 @@ More meaningful than lorem ipsum, more surprising than faker.
 $ npm install keysmash-ipsum
 ```
 
+No dependencies. The package is 28.0 kB (114.1 kB unpacked). Importing it into a bundle costs (measured with `pnpm size`, esbuild minify + gzip):
+
+| import | minified | min + gzip |
+|---|---|---|
+| everything (`import *`) | 9.9 kB | 4.2 kB |
+| `generate` + `generateWords` only | 6.0 kB | 2.5 kB |
+
 ## CLI
 
 ```
@@ -36,8 +43,8 @@ keysmash-ipsum [words|sentences] [count] [options]
 | `sentences [n]` | `n` sentences as one paragraph |
 
 ```
-$ keysmash-ipsum 10 --lang ja
-けど がぞくた 理由 元気 まっすぐに いい ねえける いはがると 街 にゃちゃと
+$ keysmash-ipsum 10 --lang ja --llm codex
+売っている サムネイル ポテト 知能テスト イラスト版 ケータリング 切ります ますます 見れても 手跡
 
 $ keysmash-ipsum words 6 --seed s1 --json-detail
 {"seed":"s1","text":"…","mid":"ft dsxc gvdw sew swmnm hju"}
@@ -139,4 +146,4 @@ $ node skills/keysmash-ipsum/scripts/gen.ts --seed s1 --lang ja --trace
 
 ## License
 
-MIT © [anozon](https://anozon.me)
+MIT © [elzup](https://elzup.com)

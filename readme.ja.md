@@ -24,6 +24,13 @@ lorem ipsum より意味があり、faker より予想外の言葉になる。
 $ npm install keysmash-ipsum
 ```
 
+依存パッケージは無し。パッケージは 28.0 kB (展開後 114.1 kB)。bundle に import したときのサイズ (`pnpm size` で測定、esbuild の minify + gzip):
+
+| import | minified | min + gzip |
+|---|---|---|
+| すべて (`import *`) | 9.9 kB | 4.2 kB |
+| `generate` + `generateWords` だけ | 6.0 kB | 2.5 kB |
+
 ## CLI
 
 ```
@@ -36,8 +43,8 @@ keysmash-ipsum [words|sentences] [count] [options]
 | `sentences [n]` | `n` 個の文を 1 段落で |
 
 ```
-$ keysmash-ipsum 10 --lang ja
-けど がぞくた 理由 元気 まっすぐに いい ねえける いはがると 街 にゃちゃと
+$ keysmash-ipsum 10 --lang ja --llm codex
+売っている サムネイル ポテト 知能テスト イラスト版 ケータリング 切ります ますます 見れても 手跡
 
 $ keysmash-ipsum words 6 --seed s1 --json-detail
 {"seed":"s1","text":"…","mid":"ft dsxc gvdw sew swmnm hju"}
@@ -139,4 +146,4 @@ $ node skills/keysmash-ipsum/scripts/gen.ts --seed s1 --lang ja --trace
 
 ## License
 
-MIT © [anozon](https://anozon.me)
+MIT © [elzup](https://elzup.com)
