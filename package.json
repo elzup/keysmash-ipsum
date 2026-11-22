@@ -1,6 +1,6 @@
 {
   "name": "keysmash-ipsum",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Dummy text from keysmash: seeded random typos (English / mistyped hiragana) restored into sentences by any LLM you plug in",
   "author": "elzup",
   "license": "MIT",
