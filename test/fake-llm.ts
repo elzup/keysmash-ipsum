@@ -2,7 +2,7 @@ import type { Complete, JsonSchema } from '../src/index.ts'
 
 /**
  * schema のとおりに埋める偽 LLM。文字列の葉にはキー名 (w1, s1 …) を入れる。
- * en の strict では先頭語の大文字化を LLM がやる想定なので、s*.w1 だけ大文字で返す
+ * sentences の en では文頭の大文字化を LLM がやる想定なので、s*.w1 だけ大文字で返す
  */
 const fill = (schema: JsonSchema, key: string, parent: string): unknown => {
   if (schema.type === 'string') {

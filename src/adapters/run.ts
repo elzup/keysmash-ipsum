@@ -7,6 +7,8 @@ export type RunOptions = {
   /** stdin に流す内容。プロンプトは引数でなくここで渡す (フラグとの取り違え・引数長の上限を避ける) */
   input: string
   cwd: string
+  /** true: 終了コードが 0 以外でも stdout を返す (エラー内容を stdout の JSON に出す CLI 用) */
+  shouldReadStdoutOnFailure?: boolean
 }
 
 /**
@@ -37,11 +39,14 @@ export const runCommand = (
       reject(new Error(reason))
     })
     child.on('close', (code, signal) => {
-      if (code === 0) {
+      if (code === 0 || opts.shouldReadStdoutOnFailure === true) {
         resolve(Buffer.concat(stdout).toString('utf8'))
         return
       }
-      const detail = Buffer.concat(stderr).toString('utf8').trim()
+      // claude --output-format json はエラーも stdout の JSON に出すので、stderr が空なら stdout を見せる
+      const detail =
+        Buffer.concat(stderr).toString('utf8').trim() ||
+        Buffer.concat(stdout).toString('utf8').trim()
       const status = signal === null ? `exit ${code}` : `signal ${signal}`
       reject(new Error(`${command} が失敗しました (${status}): ${detail}`))
     })

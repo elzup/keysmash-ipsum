@@ -2,17 +2,21 @@
 
 English | [日本語](./readme.ja.md)
 
-> Dummy text from keysmash. Seeded random typos (English / mistyped hiragana) are restored into sentences by any LLM you plug in.
+> Dummy text from keysmash. Seeded random typos (English / mistyped hiragana) are restored into real words or sentences by an LLM, through structured output.
 
 ```
-ft dsxc gvdw sew swmnm hju ftgz hny.       → At discos gods sew swimsuits, huge frogs hum.
-のちゃが てさひさく がもが いしまぷれ。      → 残りが手作りで誰もがいたします。
+$ keysmash-ipsum 10
+as fix huh jail hazard seasons groups ads flights fly
+
+$ keysmash-ipsum sentences 3
+So the very last person standing. This book changed it, the student said. Everyone can go to england before morning.
 ```
 
 More meaningful than lorem ipsum, more surprising than faker.
 
-- **Generation (`generate`)** is deterministic from a seed. No LLM, no network.
-- **Restoration (`restore`)** calls the LLM exactly once. The LLM is plugged in as a single function (`complete`), so the provider, API key and retries stay on the caller's side.
+- **Generation** is deterministic from a seed. No LLM, no network.
+- **Restoration** calls the LLM once, with structured output. The schema has one required key per keysmash word, so the word count is guaranteed by structure, not by asking nicely.
+- The LLM is plugged in as a single function, so the provider, API key and retries stay on your side. The CLI uses a CLI you are already logged in to (Claude Code or Codex), so it needs no API key.
 
 ## Install
 
@@ -20,42 +24,92 @@ More meaningful than lorem ipsum, more surprising than faker.
 $ npm install keysmash-ipsum
 ```
 
-## Usage
+## CLI
+
+```
+keysmash-ipsum [words|sentences] [count] [options]
+```
+
+| command | output |
+|---|---|
+| `words [n]` (default) | `n` separate words, space-separated, no punctuation. Each word is restored on its own, not as a sentence |
+| `sentences [n]` | `n` sentences as one paragraph |
+
+```
+$ keysmash-ipsum 10 --lang ja
+けど がぞくた 理由 元気 まっすぐに いい ねえける いはがると 街 にゃちゃと
+
+$ keysmash-ipsum words 6 --seed s1 --json-detail
+{"seed":"s1","text":"…","mid":"ft dsxc gvdw sew swmnm hju"}
+```
+
+| option | default | |
+|---|---|---|
+| `[n]` / `--count` | words `8` (max `200`) / sentences `3` (max `20`) | number of words / sentences |
+| `--lang` | `en` | `en` / `ja` |
+| `--seed` | current time | same seed → same keysmash |
+| `--layout` | `qwerty` | `qwerty` (adjacent-key habits) / `uniform` |
+| `--llm` | `claude` | `claude` (`claude -p --json-schema`) / `codex` (`codex exec --output-schema`) |
+| `--model` | claude: `sonnet` / codex: its default | model passed to the CLI |
+| `--raw` | off | print the keysmash without calling the LLM |
+| `--json-detail` | off | print `{ seed, text, mid }` as JSON (`mid` is the keysmash) |
+| `-h`, `--help` | | show usage |
+
+- The keysmash is deterministic; the restored text is not (the LLM answers differently each time).
+- The prompt is passed on stdin and nothing goes through a shell. Claude Code runs with its tools, MCP servers and settings files (CLAUDE.md, hooks) turned off.
+- Codex still reads `~/.codex/AGENTS.md`; there is no flag to turn it off. The output is constrained by the schema anyway.
+
+### Cost
+
+One call, measured on 2026-11-22 (Claude Code 2.1.330 with `sonnet` + `--effort low`, codex-cli 0.171.0). Tokens are input + output, including each CLI's own overhead.
+
+| command | claude tokens | claude (API-equivalent) | claude time | codex tokens | codex time |
+|---|---|---|---|---|---|
+| `words 8` | ~1.7k | $0.008 | 7 s | ~38k | 19 s |
+| `words 100` | ~6.1k | $0.039 | 16 s | ~40k | 25 s |
+| `sentences 3` | ~2.2k | $0.010 | 7 s | | |
+| `sentences 20` | ~7.5k | $0.038 | 12 s | | |
+
+- On a subscription this counts toward your plan's usage. One call is small next to a coding-agent turn, which re-reads the whole conversation.
+- About 1.2k input tokens of each claude call are Claude Code's own scaffolding. Codex has a fixed ~30k (its system prompt plus `AGENTS.md`).
+- Calling the API directly from the library (below) skips that overhead.
+
+## Library
 
 ### Generate only (no LLM)
 
 ```ts
-import { generate } from 'keysmash-ipsum'
+import { generate, generateWords } from 'keysmash-ipsum'
+
+generateWords({ seed: 's1', count: 3 }).map((w) => w.text)
+// ['ft', 'dsxc', 'gvdw']
 
 generate({ seed: 's1', count: 2 }).map((s) => s.text)
 // ['ft dsxc gvdw sew swmnm hju ftgz hny.', 'fv fbmjmr aqwev jyjhmnjn.']
-
-generate({ seed: 'w', lang: 'ja', words: { min: 1, max: 1 } })[0].text
-// 'いだれにがん'  (a single word gets no terminal punctuation)
 ```
 
 | option | default | |
 |---|---|---|
 | `seed` | current time | same seed → same string |
-| `count` | `1` | number of sentences |
-| `words` | `{ min: 4, max: 9 }` | words per sentence |
+| `count` | `1` | words (`generateWords`) / sentences (`generate`) |
+| `words` | `{ min: 4, max: 9 }` | words per sentence (`generate` only) |
 | `wordLen` | en `2-8` / ja `2-5` | word length (for ja: number of kana, excluding particles) |
 | `layout` | `'qwerty'` | en: adjacent-key habits / `'uniform'` picks a–z evenly. ja: frequency table / `'uniform'` picks kana evenly |
 | `lang` | `'en'` | `'ja'` generates hiragana directly, mixing in vowel-row / consonant-column / dakuten slips, inserted っ/ん, and dropped kana |
-| `seps` | `' ,'` | separator candidates. The first one is used 85% of the time |
+| `seps` | `' ,'` | separator candidates (`generate` only). The first one is used 85% of the time |
 
-Each `Sentence` carries intermediate data in `words[].trace` (en: `·` adjacent / `|` jump, ja: the kana before the slip and how it slipped).
+Each `Word` carries intermediate data in `trace` (en: `·` adjacent / `|` jump, ja: the kana before the slip and how it slipped).
 
-### Turn it into text with an LLM
+### Restore with an LLM
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk'
-import { type Complete, keysmashIpsum } from 'keysmash-ipsum'
+import { type Complete, generateWords, restoreWords } from 'keysmash-ipsum'
 
 const client = new Anthropic() // reads ANTHROPIC_API_KEY
 const complete: Complete = async ({ system, prompt, schema }) => {
   const res = await client.messages.create({
-    model: 'claude-haiku-5-5',
+    model: 'claude-sonnet-5-5',
     max_tokens: 16000,
     system,
     messages: [{ role: 'user', content: prompt }],
@@ -65,41 +119,19 @@ const complete: Complete = async ({ system, prompt, schema }) => {
   return JSON.parse(block?.type === 'text' ? block.text : 'null')
 }
 
-await keysmashIpsum({ lang: 'ja', count: 3, complete })
-// [{ keysmash: 'のちゃが てさひさく …', text: '残りが手作りで…' }, …]
+const words = generateWords({ count: 5 })
+await restoreWords(words, { complete }) // ['as', 'fix', 'huh', 'jail', 'hazard']
 ```
 
-- **Structured output is required.** `complete` receives `{ system, prompt, schema }` and must pass `schema` to the provider's structured output (Anthropic `output_config.format`, OpenAI `response_format` json_schema, …), returning the parsed JSON.
-- The schema fixes one key per sentence (`s1`, `s2`, …) and one key per keysmash word (`w1`, `w2`, …), so the word count is guaranteed by structure. Punctuation and separators are restored from the input, not left to the LLM. The result is validated again, and a missing, empty or mistyped key throws.
-- All sentences are sent in a single call. Input is a few hundred tokens, so a small model is enough.
-- Lower-level pieces: `buildRequest(sentences, { lang })` builds the request, `parseRestored(output, sentences, { lang })` validates and assembles the result. `strict: false` allows free paraphrase (one string per sentence).
-
-## CLI
-
-```
-$ npx keysmash-ipsum 6
-It does gave see some you.
-
-$ npx keysmash-ipsum --seed s1 --json-detail 6
-{"seed":"s1","text":"It does gave see some you.","mid":"ft dsxc gvdw sew swmnm hju."}
-```
-
-The argument (or `--count`) is the number of words. Restoration runs through a CLI you are already logged in to, with its structured output: [Claude Code](https://claude.com/claude-code) (`claude -p --json-schema`, default) or [Codex CLI](https://github.com/openai/codex) (`codex exec --output-schema`). It uses that login (your subscription), so no API key is needed, but it counts toward your plan's usage. A call takes 15–60 seconds. The prompt is passed on stdin and nothing goes through a shell.
-
-| option | default | |
-|---|---|---|
-| `<words>` / `--count` | `8` | number of words |
-| `--lang` | `en` | `en` / `ja` |
-| `--seed` | current time | same seed → same keysmash |
-| `--layout` | `qwerty` | `qwerty` / `uniform` |
-| `--llm` | `claude` | `claude` / `codex` |
-| `--model` | claude: `haiku` / codex: its default | model passed to the CLI |
-| `--raw` | off | print the keysmash without calling the LLM |
-| `--json-detail` | off | print `{ seed, text, mid }` as JSON (`mid` is the keysmash) |
+- **Structured output is required.** `complete` receives `{ system, prompt, schema }`, must pass `schema` to the provider's structured output (Anthropic `output_config.format`, OpenAI `response_format` json_schema, …) and return the parsed JSON.
+- **The schema guarantees the shape.** `restoreWords` uses one required key per word (`w1`, `w2`, …); `restore` (sentences) uses one per sentence and word (`s1.w1`, …). Array length limits are not used, since Anthropic structured output does not support them.
+- **The result is validated again.** A missing, empty or mistyped key (possible on a refusal or a cut-off output) throws `RestoreMismatchError`; the call is retried once first. Provider errors are not retried.
+- Punctuation, separators and the capital at the start of an English sentence are restored from the input, not left to the LLM.
+- `keysmashIpsum({ count, lang, complete })` does `generate` + `restore` in one go. Lower-level pieces: `buildWordsRequest` / `parseWords`, `buildRequest` / `parseRestored`. `strict: false` lets `restore` paraphrase freely (one string per sentence).
 
 ## Agent skill
 
-`skills/keysmash-ipsum/` is a skill for agents such as Claude Code. The agent itself does the restoring, so no API key is needed. The CLI imports `src` as `.ts` directly, so it runs from a clone without a build.
+`skills/keysmash-ipsum/` is a skill for agents such as Claude Code. The agent itself does the restoring, so no API key is needed. Its CLI imports `src` as `.ts` directly, so it runs from a clone without a build.
 
 ```
 $ node skills/keysmash-ipsum/scripts/gen.ts --seed s1 --lang ja --trace

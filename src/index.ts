@@ -7,19 +7,26 @@ export {
   resolveOptions,
   type Sentence,
 } from './generate.ts'
+export { buildRequest, buildSchema, parseRestored } from './prompt.ts'
 export {
-  buildRequest,
-  buildSchema,
   type JsonSchema,
   type PromptOptions,
-  parseRestored,
+  RestoreMismatchError,
   type RestoreRequest,
-} from './prompt.ts'
+} from './request.ts'
 export {
   type Complete,
   type IpsumResult,
   keysmashIpsum,
   type RestoreOptions,
   restore,
+  restoreWords,
 } from './restore.ts'
 export type { Range } from './rng.ts'
+export {
+  buildWordsRequest,
+  buildWordsSchema,
+  generateWords,
+  parseWords,
+  type WordsOptions,
+} from './words.ts'

@@ -3,9 +3,11 @@ import { describe, it } from 'node:test'
 import {
   buildRequest,
   buildSchema,
+  type Complete,
   generate,
   keysmashIpsum,
   parseRestored,
+  RestoreMismatchError,
   restore,
 } from '../src/index.ts'
 import { fakeComplete } from './fake-llm.ts'
@@ -143,5 +145,41 @@ describe('restore / keysmashIpsum', () => {
     assert.equal(results.length, 2)
     assert.equal(results[0]?.keysmash, twoSentences[0]?.text)
     assert.match(results[0]?.text ?? '', /^W1.w2.+w3\.$/)
+  })
+})
+
+describe('restore のやり直し', () => {
+  it('型どおりでなければ 1 回だけやり直す', async () => {
+    const calls: number[] = []
+    const flaky: Complete = async (request) => {
+      calls.push(1)
+      return calls.length === 1 ? {} : fakeComplete(request)
+    }
+    const out = await restore(twoSentences, { complete: flaky })
+    assert.equal(calls.length, 2)
+    assert.equal(out.length, 2)
+  })
+
+  it('2 回続いたら RestoreMismatchError で throw する', async () => {
+    const calls: number[] = []
+    const broken: Complete = async () => {
+      calls.push(1)
+      return {}
+    }
+    await assert.rejects(
+      restore(twoSentences, { complete: broken }),
+      RestoreMismatchError
+    )
+    assert.equal(calls.length, 2)
+  })
+
+  it('provider のエラーはやり直さない', async () => {
+    const calls: number[] = []
+    const failing: Complete = async () => {
+      calls.push(1)
+      throw new Error('rate limited')
+    }
+    await assert.rejects(restore(twoSentences, { complete: failing }), /rate/)
+    assert.equal(calls.length, 1)
   })
 })
